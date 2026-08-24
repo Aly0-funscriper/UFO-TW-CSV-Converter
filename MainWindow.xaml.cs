@@ -45,17 +45,22 @@ public partial class MainWindow : Window
         Title = english ? "UFO-TW CSV to Funscript" : "UFO-TW CSV 转 Funscript";
         TitleText.Text = Title;
         InfoText.Text = english
-            ? "Converts the original UFO-TW five-column CSV: time, left polarity, left power, right polarity, right power. Time units are 100 ms; polarity 0 is forward and 1 is reverse. Output mapping: 0–49 reverse, 50 stop, 51–100 forward."
-            : "支持原版 UFO-TW 的 5 列 CSV：时间, 左极性, 左力度, 右极性, 右力度。时间单位为 100 毫秒；极性 0 为正转，1 为反转。输出映射：0～49 反转，50 停止，51～100 正转。";
+            ? "Supports UFO-TW three-column CSV (time, polarity, power) and five-column CSV (time, left polarity, left power, right polarity, right power). Time units are 100 ms; polarity 0 is forward and 1 is reverse. Output mapping: 0–49 reverse, 50 stop, 51–100 forward."
+            : "支持 UFO-TW 的三列 CSV（时间,极性,力度）和五列 CSV（时间,左极性,左力度,右极性,右力度）。时间单位为 100 毫秒；极性 0 为正转，1 为反转。输出映射：0～49 反转，50 停止，51～100 正转。";
         SelectButton.Content = english ? "Select CSV" : "选择 CSV";
         ClearButton.Content = english ? "Clear list" : "清空列表";
         DragHintText.Text = english ? "You can also drag CSV files into this window" : "也可以把 CSV 拖到窗口中";
         StripSuffixCheckBox.Content = english
             ? "Automatically remove _ufotw or .ufotw from the input file name"
             : "如果文件名以 _ufotw 或 .ufotw 结尾，自动去掉该后缀";
+        AxisTargetLabel.Text = english ? "Three-column target:" : "三列目标：";
+        AxisAutoItem.Content = english ? "Auto-detect" : "自动判断";
+        AxisBothItem.Content = english ? "Both sides" : "左右两侧";
+        AxisLeftItem.Content = english ? "Left only" : "仅左侧";
+        AxisRightItem.Content = english ? "Right only" : "仅右侧";
         OutputHintText.Text = english
-            ? "Output files are saved next to the CSV as video-name.Lnip.funscript and video-name.Rnip.funscript."
-            : "输出文件会保存到 CSV 所在文件夹，并命名为：视频名.Lnip.funscript 和 视频名.Rnip.funscript。";
+            ? "Five-column CSV creates both files. Three-column CSV follows the file name or the target option above to create left, right, or both files."
+            : "五列 CSV 会生成左右两个文件；三列 CSV 会根据文件名或上面的选项生成左侧、右侧或左右两个文件。";
         ConvertButton.Content = english ? "Convert" : "开始转换";
         UpdateStatusText();
     }
@@ -88,15 +93,16 @@ public partial class MainWindow : Window
         try
         {
             var stripSuffix = StripSuffixCheckBox.IsChecked == true;
+            var axisTarget = (UfoCsvAxisTarget)AxisTargetSelector.SelectedIndex;
             var results = _files
-                .Select(path => UfoCsvConverter.ConvertFile(path, stripUfoTwSuffix: stripSuffix))
+                .Select(path => UfoCsvConverter.ConvertFile(path, stripUfoTwSuffix: stripSuffix, axisTarget: axisTarget))
                 .ToList();
 
             var totalRows = results.Sum(result => result.RowsRead);
             SetStatus(StatusKind.Completed, results.Count, totalRows);
             MessageBox.Show(
                 string.Join(Environment.NewLine, results.Select(result =>
-                    $"{Path.GetFileName(result.SourcePath)}\n  {Path.GetFileName(result.LeftPath)}\n  {Path.GetFileName(result.RightPath)}")),
+                    $"{Path.GetFileName(result.SourcePath)}\n{FormatOutputPath(result.LeftPath)}{FormatOutputPath(result.RightPath)}")),
                 IsEnglish ? "Conversion complete" : "转换完成",
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);
@@ -170,6 +176,9 @@ public partial class MainWindow : Window
         ClearButton.IsEnabled = _files.Count > 0;
         ConvertButton.IsEnabled = _files.Count > 0;
     }
+
+    private static string FormatOutputPath(string? path)
+        => path == null ? string.Empty : $"  {Path.GetFileName(path)}{Environment.NewLine}";
 
     private static bool HasCsvFiles(IDataObject data)
         => data.GetDataPresent(DataFormats.FileDrop)
