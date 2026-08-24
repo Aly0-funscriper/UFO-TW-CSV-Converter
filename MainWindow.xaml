@@ -48,7 +48,7 @@
             <TextBlock x:Name="InfoText"
                        Foreground="#365466"
                        TextWrapping="Wrap"
-                       Text="支持原版 UFO-TW 的 5 列 CSV：时间, 左极性, 左力度, 右极性, 右力度。时间单位为 100 毫秒；极性 0 为正转，1 为反转。输出映射：0～49 反转，50 停止，51～100 正转。" />
+                       Text="支持 UFO-TW 的三列 CSV（时间,极性,力度）和五列 CSV（时间,左极性,左力度,右极性,右力度）。时间单位为 100 毫秒；极性 0 为正转，1 为反转。输出映射：0～49 反转，50 停止，51～100 正转。" />
         </Border>
 
         <Grid Grid.Row="2">
@@ -86,13 +86,31 @@
         </Grid>
 
         <StackPanel Grid.Row="3" Margin="0,16,0,12">
-            <CheckBox x:Name="StripSuffixCheckBox"
-                      IsChecked="True"
-                      Content="如果文件名以 _ufotw 或 .ufotw 结尾，自动去掉该后缀" />
+            <StackPanel Orientation="Horizontal">
+                <CheckBox x:Name="StripSuffixCheckBox"
+                          IsChecked="True"
+                          VerticalAlignment="Center"
+                          Content="如果文件名以 _ufotw 或 .ufotw 结尾，自动去掉该后缀" />
+                <TextBlock x:Name="AxisTargetLabel"
+                           Margin="22,0,8,0"
+                           VerticalAlignment="Center"
+                           Foreground="#4D5B63"
+                           Text="三列目标：" />
+                <ComboBox x:Name="AxisTargetSelector"
+                          Width="115"
+                          Height="28"
+                          VerticalAlignment="Center"
+                          SelectedIndex="0">
+                    <ComboBoxItem x:Name="AxisAutoItem" Content="自动判断" />
+                    <ComboBoxItem x:Name="AxisBothItem" Content="左右两侧" />
+                    <ComboBoxItem x:Name="AxisLeftItem" Content="仅左侧" />
+                    <ComboBoxItem x:Name="AxisRightItem" Content="仅右侧" />
+                </ComboBox>
+            </StackPanel>
             <TextBlock x:Name="OutputHintText"
                        Margin="0,8,0,0"
                        Foreground="#66737B"
-                       Text="输出文件会保存到 CSV 所在文件夹，并命名为：视频名.Lnip.funscript 和 视频名.Rnip.funscript。" />
+                       Text="五列 CSV 会生成左右两个文件；三列 CSV 会根据文件名或上面的选项生成左侧、右侧或左右两个文件。" />
         </StackPanel>
 
         <DockPanel Grid.Row="4">
