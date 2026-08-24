@@ -26,6 +26,7 @@ public partial class App : Application
         var stripUfoTwSuffix = true;
         var quiet = false;
         var english = false;
+        var axisTarget = UfoCsvAxisTarget.Auto;
 
         for (var i = 0; i < args.Count; i++)
         {
@@ -44,6 +45,9 @@ public partial class App : Application
                     english = string.Equals(args[++i], "en", StringComparison.OrdinalIgnoreCase)
                           || string.Equals(args[i], "english", StringComparison.OrdinalIgnoreCase);
                     break;
+                case "--axis" when i + 1 < args.Count:
+                    axisTarget = ParseAxisTarget(args[++i]);
+                    break;
                 default:
                     files.Add(args[i]);
                     break;
@@ -54,8 +58,8 @@ public partial class App : Application
         {
             MessageBox.Show(
                 english
-                    ? "Usage: UfoTwCsvConverter.exe --convert file.csv [--output directory] [--keep-suffix] [--language en]"
-                    : "命令行用法：UfoTwCsvConverter.exe --convert 文件.csv [--output 输出目录] [--keep-suffix] [--language en]",
+                    ? "Usage: UfoTwCsvConverter.exe --convert file.csv [--output directory] [--keep-suffix] [--axis auto|both|left|right] [--language en]"
+                    : "命令行用法：UfoTwCsvConverter.exe --convert 文件.csv [--output 输出目录] [--keep-suffix] [--axis auto|both|left|right] [--language en]",
                 english ? "UFO-TW CSV Converter" : "UFO-TW CSV 转换器",
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);
@@ -65,7 +69,7 @@ public partial class App : Application
 
         try
         {
-            var results = files.Select(path => UfoCsvConverter.ConvertFile(path, outputDirectory, stripUfoTwSuffix)).ToList();
+            var results = files.Select(path => UfoCsvConverter.ConvertFile(path, outputDirectory, stripUfoTwSuffix, axisTarget)).ToList();
             var message = string.Join(Environment.NewLine, results.Select(result =>
                 english
                     ? $"{Path.GetFileName(result.SourcePath)}: created {Path.GetFileName(result.LeftPath)} and {Path.GetFileName(result.RightPath)}"
@@ -81,4 +85,14 @@ public partial class App : Application
             Current.Shutdown(1);
         }
     }
+
+    private static UfoCsvAxisTarget ParseAxisTarget(string value)
+        => value.ToLowerInvariant() switch
+        {
+            "auto" => UfoCsvAxisTarget.Auto,
+            "both" or "all" => UfoCsvAxisTarget.Both,
+            "left" or "lnip" => UfoCsvAxisTarget.Left,
+            "right" or "rnip" => UfoCsvAxisTarget.Right,
+            _ => throw new ArgumentException("--axis must be auto, both, left, or right"),
+        };
 }
