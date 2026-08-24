@@ -7,10 +7,18 @@ using System.Text.Json.Serialization;
 
 namespace UfoTwCsvConverter;
 
+public enum UfoCsvAxisTarget
+{
+    Auto,
+    Both,
+    Left,
+    Right,
+}
+
 public sealed record UfoCsvConversionResult(
     string SourcePath,
-    string LeftPath,
-    string RightPath,
+    string? LeftPath,
+    string? RightPath,
     int RowsRead,
     int LeftActions,
     int RightActions);
@@ -46,7 +54,8 @@ public static class UfoCsvConverter
     public static UfoCsvConversionResult ConvertFile(
         string csvPath,
         string? outputDirectory = null,
-        bool stripUfoTwSuffix = true)
+        bool stripUfoTwSuffix = true,
+        UfoCsvAxisTarget axisTarget = UfoCsvAxisTarget.Auto)
     {
         if (string.IsNullOrWhiteSpace(csvPath))
             throw new ArgumentException("没有指定 CSV 文件。", nameof(csvPath));
@@ -55,9 +64,9 @@ public static class UfoCsvConverter
         if (!File.Exists(sourcePath))
             throw new FileNotFoundException("找不到指定的 CSV 文件。", sourcePath);
 
-        var rows = ReadRows(sourcePath);
+        var rows = ReadRows(sourcePath, out var columnCount);
         if (rows.Count == 0)
-            throw new InvalidDataException("CSV 中没有可转换的数据行。格式应为：时间,左极性,左力度,右极性,右力度");
+            throw new InvalidDataException("CSV 中没有可转换的数据行。格式应为三列：时间,极性,力度；或五列：时间,左极性,左力度,右极性,右力度");
 
         var leftActions = BuildActions(rows.Select(row => (row.At, row.LeftPosition, row.Order)));
         var rightActions = BuildActions(rows.Select(row => (row.At, row.RightPosition, row.Order)));
@@ -73,10 +82,23 @@ public static class UfoCsvConverter
         if (string.IsNullOrWhiteSpace(stem))
             stem = "converted";
 
-        var leftPath = Path.Combine(directory, $"{stem}.Lnip.funscript");
-        var rightPath = Path.Combine(directory, $"{stem}.Rnip.funscript");
-        WriteFunscript(leftPath, leftActions);
-        WriteFunscript(rightPath, rightActions);
+        string? leftPath = null;
+        string? rightPath = null;
+        var target = columnCount == 5
+            ? UfoCsvAxisTarget.Both
+            : ResolveAxisTarget(stem, axisTarget);
+
+        if (target is UfoCsvAxisTarget.Both or UfoCsvAxisTarget.Left)
+        {
+            leftPath = Path.Combine(directory, $"{stem}.Lnip.funscript");
+            WriteFunscript(leftPath, leftActions);
+        }
+
+        if (target is UfoCsvAxisTarget.Both or UfoCsvAxisTarget.Right)
+        {
+            rightPath = Path.Combine(directory, $"{stem}.Rnip.funscript");
+            WriteFunscript(rightPath, rightActions);
+        }
 
         return new UfoCsvConversionResult(
             sourcePath,
@@ -87,10 +109,11 @@ public static class UfoCsvConverter
             rightActions.Count);
     }
 
-    private static List<ParsedRow> ReadRows(string sourcePath)
+    private static List<ParsedRow> ReadRows(string sourcePath, out int columnCount)
     {
         var rows = new List<ParsedRow>();
         var lines = File.ReadAllLines(sourcePath);
+        columnCount = 0;
 
         for (var lineIndex = 0; lineIndex < lines.Length; lineIndex++)
         {
@@ -111,13 +134,19 @@ public static class UfoCsvConverter
                 throw new InvalidDataException($"第 {lineNumber} 行的时间不是整数：{fields[0]}");
             }
 
-            if (fields.Count != 5)
-                throw new InvalidDataException($"第 {lineNumber} 行有 {fields.Count} 列，应为 5 列：时间,左极性,左力度,右极性,右力度");
+            if (columnCount == 0)
+                columnCount = fields.Count;
+            if (fields.Count != columnCount || columnCount is not (3 or 5))
+                throw new InvalidDataException($"第 {lineNumber} 行有 {fields.Count} 列。支持三列：时间,极性,力度；或五列：时间,左极性,左力度,右极性,右力度。");
 
             var leftPolarity = ParseBoundedInt(fields[1], 0, 1, lineNumber, "左极性");
             var leftPower = ParseBoundedInt(fields[2], 0, 100, lineNumber, "左力度");
-            var rightPolarity = ParseBoundedInt(fields[3], 0, 1, lineNumber, "右极性");
-            var rightPower = ParseBoundedInt(fields[4], 0, 100, lineNumber, "右力度");
+            var rightPolarity = columnCount == 3
+                ? leftPolarity
+                : ParseBoundedInt(fields[3], 0, 1, lineNumber, "右极性");
+            var rightPower = columnCount == 3
+                ? leftPower
+                : ParseBoundedInt(fields[4], 0, 100, lineNumber, "右力度");
 
             int at;
             try
@@ -137,6 +166,25 @@ public static class UfoCsvConverter
         }
 
         return rows;
+    }
+
+    private static UfoCsvAxisTarget ResolveAxisTarget(string stem, UfoCsvAxisTarget axisTarget)
+    {
+        if (axisTarget != UfoCsvAxisTarget.Auto)
+            return axisTarget;
+
+        var hasLeft = stem.Contains("左", StringComparison.OrdinalIgnoreCase)
+                   || stem.Contains("left", StringComparison.OrdinalIgnoreCase)
+                   || stem.Contains("lnip", StringComparison.OrdinalIgnoreCase);
+        var hasRight = stem.Contains("右", StringComparison.OrdinalIgnoreCase)
+                    || stem.Contains("right", StringComparison.OrdinalIgnoreCase)
+                    || stem.Contains("rnip", StringComparison.OrdinalIgnoreCase);
+
+        if (hasLeft && !hasRight)
+            return UfoCsvAxisTarget.Left;
+        if (hasRight && !hasLeft)
+            return UfoCsvAxisTarget.Right;
+        return UfoCsvAxisTarget.Both;
     }
 
     private static int ParseBoundedInt(string value, int min, int max, int lineNumber, string fieldName)
